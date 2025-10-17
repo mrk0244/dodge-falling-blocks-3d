@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dodge Falling Blocks 3D — Perfect Edition</title>
+  <title>Dodge Falling Blocks 3D</title>
   <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.tailwindcss.com/"></script>
   <!-- Three.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   
@@ -16,26 +16,55 @@
     }
     html, body { height: 100%; }
     body { margin: 0; overflow: hidden; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji"; }
-    /* Fullscreen canvas holder */
     #app { position: fixed; inset: 0; }
     canvas { display: block; width: 100vw; height: 100vh; outline: none; }
-
-    /* HUD */
     .hud { position: fixed; inset: 0; pointer-events: none; }
     .hud * { pointer-events: auto; }
-
-    /* Glass panels */
-    .glass { backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); background: var(--ui-bg); box-shadow: 0 20px 40px rgba(0,0,0,.35); }
-
-    /* Mobile touch controls */
-    .touch-btn { width: 80px; height: 80px; border-radius: 9999px; display: grid; place-items: center; user-select: none; -webkit-tap-highlight-color: transparent; }
-
-    /* Animations */
+    .glass { backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); background: var(--ui-bg); box-shadow: 0 25px 50px rgba(0,0,0,.5); border: 1px solid rgba(255,255,255,0.1); }
+    .touch-btn { width: 80px; height: 80px; border-radius: 9999px; display: grid; place-items: center; user-select: none; -webkit-tap-highlight-color: transparent; background: var(--ui-bg-strong); }
     .fade-in { animation: fade-in .35s ease both; }
     @keyframes fade-in { from { opacity: 0; transform: translateY(6px) scale(.98); } }
-
-    /* Simple gradient sky background (behind WebGL) */
+    .powerup-icon { animation: powerup-icon-anim .5s ease-in-out infinite alternate; }
+    @keyframes powerup-icon-anim { from { transform: scale(1); } to { transform: scale(1.1); } }
     #bg { position: fixed; inset: 0; background: radial-gradient(120% 120% at 50% 0%, #172554 0%, #0b1220 60%, #05080f 100%); z-index: -1; }
+
+    /* Custom Input Range styling for modern look */
+    input[type=range] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 8px;
+      background: #3f3f46; /* Neutral-700 */
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      height: 20px;
+      width: 20px;
+      border-radius: 50%;
+      background: #3b82f6; /* Blue-500 */
+      box-shadow: 0 0 4px rgba(0,0,0,.5);
+    }
+    /* Countdown styling */
+    #countdown-modal {
+        position: fixed;
+        inset: 0;
+        display: none;
+        place-items: center;
+        background-color: rgba(0,0,0,0.3);
+        z-index: 30;
+        color: white;
+    }
+    #countdown-text {
+        font-size: 8rem; /* Large text for countdown */
+        font-weight: 900;
+        animation: countdown-pulse 1s ease-in-out infinite;
+        text-shadow: 0 0 20px #3b82f6;
+    }
+    @keyframes countdown-pulse {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.2); opacity: 0.8; }
+    }
   </style>
 </head>
 <body>
@@ -43,24 +72,22 @@
   <div id="app"></div>
 
   <!-- HUD / UI -->
-  <div class="hud">
-    <!-- Top status bar (hidden initially) -->
-    <div id="game-hud" class="absolute left-1/2 -translate-x-1/2 top-4 flex items-center gap-3 px-4 py-2 rounded-full glass text-white text-base sm:text-lg opacity-0 transition-opacity duration-300">
+  <div class="hud" aria-live="polite">
+    <div id="game-hud" class="absolute left-1/2 -translate-x-1/2 top-4 flex items-center gap-3 px-4 py-2 rounded-full glass text-white text-base sm:text-lg opacity-0 transition-opacity duration-300" aria-label="Game status bar">
       <div class="font-semibold">Score: <span id="ui-score">0</span></div>
       <div class="font-semibold">Lives: <span id="ui-lives">3</span></div>
       <div class="font-semibold hidden sm:block">Best: <span id="ui-best">0</span></div>
-      <button id="btn-pause" class="ml-2 px-3 py-1 rounded-full bg-white/10 hover:bg-white/20 transition text-sm">Pause</button>
-      <button id="btn-settings" class="px-3 py-1 rounded-full bg-white/10 hover:bg-white/20 transition text-sm">Settings</button>
+      <div id="ui-powerup-status" class="ml-2 font-semibold flex items-center gap-2"></div>
+      <button id="btn-pause" class="ml-auto px-3 py-1 rounded-full bg-white/10 hover:bg-white/20 transition text-sm font-semibold" aria-label="Pause or resume game">Pause</button>
+      <!-- Settings icon button (Updated Symbol) -->
+      <button id="btn-settings" class="p-2 rounded-full bg-white/10 hover:bg-white/20 transition" aria-label="Open settings">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+            <path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.31-.61-.22l-2.49 1c-.52-.39-1.09-.72-1.71-.99L14.12 3.4c-.09-.23-.3-.38-.54-.38h-4c-.24 0-.45.15-.54.38L8.65 6.01c-.62.27-1.2.6-1.71.99l-2.49-1c-.22-.09-.49 0-.61.22l-2 3.46c-.12.22-.07.49.12.64l2.11 1.65c-.04.32-.07.64-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.31.61.22l2.49-1c.52.39 1.09.72 1.71.99l.34 2.59c.09.23.3.38.54.38h4c.24 0 .45-.15.54-.38l.34-2.59c.62-.27 1.2-.6 1.71-.99l2.49 1c.22.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zm-7.43 1.91c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z"/></svg>
+      </button>
     </div>
-
-    <!-- Center messages -->
-    <div id="ui-banner" class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center text-white w-full max-w-md px-4">
-      <!-- Content is generated by JavaScript -->
-    </div>
-
-    <!-- Bottom mobile controls (hidden initially) -->
-    <div id="touch-controls" class="absolute bottom-6 left-1/2 -translate-x-1/2 md:hidden opacity-0 transition-opacity duration-300">
-      <div class="flex items-center gap-6">
+    <div id="ui-banner" class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center text-white w-full max-w-md px-4"></div>
+    <div id="touch-controls" class="absolute bottom-6 left-6 right-6 md:hidden opacity-0 transition-opacity duration-300 flex justify-between items-end">
+      <div class="flex gap-4">
         <button id="btn-left" aria-label="Move left" class="touch-btn glass text-white active:scale-95 transition">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="36" height="36" fill="currentColor"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
         </button>
@@ -68,37 +95,94 @@
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="36" height="36" fill="currentColor"><path d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z"/></svg>
         </button>
       </div>
+      <div class="flex flex-col gap-4">
+        <button id="btn-up" aria-label="Move up" class="touch-btn glass text-white active:scale-95 transition">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="36" height="36" fill="currentColor"><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"/></svg>
+        </button>
+        <button id="btn-down" aria-label="Move down" class="touch-btn glass text-white active:scale-95 transition">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="36" height="36" fill="currentColor"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg>
+        </button>
+      </div>
     </div>
   </div>
 
-  <!-- Settings Drawer -->
-  <div id="drawer" class="fixed right-4 top-4 w-[300px] max-w-[90vw] text-white glass rounded-2xl p-4 hidden z-10">
-    <div class="flex items-center justify-between">
-      <h2 class="text-lg font-semibold">Settings</h2>
-      <button id="btn-close-settings" class="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-sm">Close</button>
-    </div>
-    <div class="mt-3 space-y-4">
-      <div>
-        <label class="text-sm">Sensitivity</label>
-        <input id="inp-sens" type="range" min="0.5" max="2.0" step="0.1" value="1" class="w-full">
+  <!-- Countdown Modal -->
+  <div id="countdown-modal">
+      <div id="countdown-text">3</div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div id="settings-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 hidden z-20" aria-label="Game Settings">
+    <div class="w-full max-w-lg glass rounded-2xl p-6 sm:p-8 text-white fade-in">
+      <div class="flex items-center justify-between">
+        <h2 class="text-3xl font-bold text-sky-400 drop-shadow-lg">Game Settings</h2>
+        <button id="btn-close-settings" class="p-2 rounded-full bg-white/10 hover:bg-white/20 text-sm transition" aria-label="Close settings">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
       </div>
-      <div>
-        <label class="text-sm">Volume</label>
-        <input id="inp-vol" type="range" min="0" max="1" step="0.05" value="0.5" class="w-full">
+      <div class="mt-6 space-y-6">
+        <div>
+          <label class="text-lg font-semibold block mb-2" for="inp-sens">Sensitivity (<span id="sens-val">1.0</span>)</label>
+          <input id="inp-sens" type="range" min="0.5" max="2.0" step="0.1" value="1" aria-valuenow="1">
+        </div>
+        <div>
+          <label class="text-lg font-semibold block mb-2" for="inp-vol">Volume (<span id="vol-val">50%</span>)</label>
+          <input id="inp-vol" type="range" min="0" max="1" step="0.05" value="0.5" aria-valuenow="0.5">
+        </div>
+        <div>
+          <label class="text-lg font-semibold block mb-2" for="sel-gfx">Graphics Quality</label>
+          <select id="sel-gfx" class="mt-1 w-full bg-white/10 border border-white/20 rounded-xl p-3 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 transition shadow-inner">
+            <option value="veryHigh">Very High (Max Shadows)</option>
+            <option value="high" selected>High (Shadows)</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+            <option value="veryLow">Very Low</option>
+          </select>
+          <div class="mt-2 text-xs text-white/70">Changing graphics quality will reset the game. Low settings save battery.</div>
+        </div>
       </div>
-      <div>
-        <label class="text-sm">Graphics</label>
-        <select id="sel-gfx" class="mt-1 w-full bg-white/10 rounded-lg p-2">
-          <option value="high">High (shadows)</option>
-          <option value="medium">Medium</option>
-          <option value="low">Low</option>
-        </select>
-      </div>
-      <div class="text-xs text-white/70">Changes apply immediately. Graphics may reduce battery usage on mobile.</div>
     </div>
   </div>
 
   <script>
+  // =========================
+  // Gemini API Integration
+  // =========================
+  const GEMINI_API_KEY = "AIzaSyA_wimRQEByDcjAloxk5Ar5GbzBVfab8JU"; // API key added here
+
+  async function callGemini(prompt, systemInstruction) {
+    const model = 'gemini-2.5-flash-preview-05-20';
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
+    const payload = { contents: [{ parts: [{ text: prompt }] }] };
+    if (systemInstruction) {
+      payload.systemInstruction = { parts: [{ text: systemInstruction }] };
+    }
+    let response;
+    let retries = 3;
+    let delay = 1000;
+    while(retries > 0) {
+      try {
+        response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (response.ok) {
+          const result = await response.json();
+          return result.candidates?.[0]?.content?.parts?.[0]?.text;
+        }
+      } catch (error) {
+        console.error("Gemini API call failed:", error);
+      }
+      retries--;
+      if (retries > 0) {
+        await new Promise(resolve => setTimeout(resolve, delay));
+        delay *= 2;
+      }
+    }
+    return null;
+  }
+
   // =========================
   // Utility & Audio helpers
   // =========================
@@ -109,13 +193,18 @@
     constructor() { this.ctx = null; this.gain = null; this.volume = 0.5; }
     ensure() {
       if (this.ctx) return;
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const gain = ctx.createGain(); gain.gain.value = this.volume; gain.connect(ctx.destination);
-      this.ctx = ctx; this.gain = gain;
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const gain = ctx.createGain(); gain.gain.value = this.volume; gain.connect(ctx.destination);
+        this.ctx = ctx; this.gain = gain;
+      } catch (e) {
+        console.warn("AudioContext creation failed:", e);
+      }
     }
     setVolume(v) { this.volume = v; if (this.gain) this.gain.gain.value = v; }
     beep(freq = 880, dur = 0.08, type = 'square') {
       this.ensure();
+      if (!this.ctx || !this.gain) return;
       const o = this.ctx.createOscillator(); const g = this.ctx.createGain();
       o.type = type; o.frequency.value = freq; g.gain.value = this.volume;
       o.connect(g); g.connect(this.gain);
@@ -131,8 +220,12 @@
   const WORLD = { width: 120, depth: 60, height: 160 };
   const PLAYER = { w: 10, h: 6, d: 8, maxSpeed: 40 };
   const OBST = { min: 6, max: 16 };
+  const POWERUP_TYPES = {
+    SHIELD: { name: 'Shield', duration: 8, icon: '🛡️', color: 0x0ea5e9 },
+    SLOWMO: { name: 'Slow-Mo', duration: 6, icon: '⏳', color: 0xeab308 },
+    SHRINK: { name: 'Shrink', duration: 7, icon: '🤏', color: 0x9333ea },
+  };
 
-  // Difficulty Levels & Settings
   const LEVELS = {
     easy:     { name: 'Easy',     INIT: { lives: 5, spawnEvery: 1.2, speed: 10 }, DIFF: { speedPerMin: 6,  spawnFasterPerMin: 0.25, maxFallSpeed: 45, minSpawn: 0.3 } },
     moderate: { name: 'Moderate', INIT: { lives: 3, spawnEvery: 0.8, speed: 14 }, DIFF: { speedPerMin: 10, spawnFasterPerMin: 0.3,  maxFallSpeed: 55, minSpawn: 0.22 } },
@@ -140,8 +233,13 @@
     insane:   { name: 'Insane',   INIT: { lives: 1, spawnEvery: 0.5, speed: 28 }, DIFF: { speedPerMin: 25, spawnFasterPerMin: 0.5,  maxFallSpeed: 90, minSpawn: 0.15 } }
   };
 
-  // Graphics presets
-  const GFX = { high: { shadows: true }, medium: { shadows: false }, low: { shadows: false } };
+  const GFX = {
+    veryHigh: { shadows: true, shadowMapSize: 2048, pixelRatio: Math.min(window.devicePixelRatio || 1, 2) },
+    high:     { shadows: true, shadowMapSize: 1024, pixelRatio: Math.min(window.devicePixelRatio || 1, 2) },
+    medium:   { shadows: false, shadowMapSize: 1024, pixelRatio: 1 },
+    low:      { shadows: false, shadowMapSize: 512, pixelRatio: 1 },
+    veryLow:  { shadows: false, shadowMapSize: 512, pixelRatio: 0.75 }
+  };
 
   // =========================
   // Three.js setup
@@ -151,6 +249,7 @@
   const appEl = document.getElementById('app');
 
   function initThree(gfxQuality = 'high') {
+    const quality = GFX[gfxQuality];
     scene = new THREE.Scene();
     scene.fog = new THREE.Fog(0x0b1220, 120, 260);
     camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 600);
@@ -158,9 +257,9 @@
     camera.lookAt(0, 10, 0);
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setPixelRatio(quality.pixelRatio);
     renderer.outputEncoding = THREE.sRGBEncoding;
-    renderer.shadowMap.enabled = GFX[gfxQuality].shadows;
+    renderer.shadowMap.enabled = quality.shadows;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     appEl.innerHTML = '';
     appEl.appendChild(renderer.domElement);
@@ -168,8 +267,10 @@
     scene.add(hemiLight);
     dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
     dirLight.position.set(60, 100, 40);
-    dirLight.castShadow = GFX[gfxQuality].shadows;
-    dirLight.shadow.mapSize.set(1024, 1024);
+    dirLight.castShadow = quality.shadows;
+    if (quality.shadows) {
+      dirLight.shadow.mapSize.set(quality.shadowMapSize, quality.shadowMapSize);
+    }
     dirLight.shadow.camera.near = 1; dirLight.shadow.camera.far = 280;
     dirLight.shadow.camera.left = -120; dirLight.shadow.camera.right = 120;
     dirLight.shadow.camera.top = 140; dirLight.shadow.camera.bottom = -60;
@@ -188,35 +289,80 @@
   }
 
   // =========================
-  // Entities: Player & Obstacles
+  // Entities: Player, Obstacles & Power-ups
   // =========================
   class Player {
     constructor() {
       const geo = new THREE.BoxBufferGeometry(PLAYER.w, PLAYER.h, PLAYER.d);
-      const mat = new THREE.MeshStandardMaterial({ color: 0xf1c40f, roughness: 0.35, metalness: 0.1 });
-      this.mesh = new THREE.Mesh(geo, mat);
+      this.baseMat = new THREE.MeshStandardMaterial({ color: 0xf1c40f, roughness: 0.35, metalness: 0.1 });
+      this.mesh = new THREE.Mesh(geo, this.baseMat);
       this.mesh.castShadow = true;
       this.mesh.position.set(0, ground.position.y + PLAYER.h / 2 + 2, 0);
       scene.add(this.mesh);
-      this.vel = 0; this.targetDir = 0; this.sensitivity = 1.0;
+      this.vel = 0; this.targetDir = 0; this.velZ = 0; this.targetDirZ = 0;
+      this.sensitivity = 1.0;
+      this.isShielded = false;
+      this.shieldMesh = null;
+      this.isShrunk = false;
     }
     setSensitivity(s) { this.sensitivity = s; }
+    setShield(active) {
+      if (this.isShielded === active) return;
+      this.isShielded = active;
+      if (active) {
+        if (!this.shieldMesh) {
+          const geo = new THREE.SphereBufferGeometry(PLAYER.w * 0.8, 16, 12);
+          const mat = new THREE.MeshStandardMaterial({ color: 0x0ea5e9, transparent: true, opacity: 0.3, side: THREE.FrontSide });
+          this.shieldMesh = new THREE.Mesh(geo, mat);
+          this.mesh.add(this.shieldMesh);
+        }
+        this.shieldMesh.visible = true;
+      } else {
+        if (this.shieldMesh) this.shieldMesh.visible = false;
+      }
+    }
+    setShrink(active) {
+      if (this.isShrunk === active) return;
+      this.isShrunk = active;
+      this.mesh.scale.setScalar(active ? 0.6 : 1.0);
+    }
     update(dt) {
       const accel = 70 * this.sensitivity; const friction = 12;
-      const desired = this.targetDir * PLAYER.maxSpeed;
-      const delta = desired - this.vel;
-      const impulse = clamp(delta, -accel, accel);
-      this.vel += impulse * dt;
+      const desiredX = this.targetDir * PLAYER.maxSpeed;
+      const deltaX = desiredX - this.vel;
+      const impulseX = clamp(deltaX, -accel, accel);
+      this.vel += impulseX * dt;
       if (this.targetDir === 0) {
         const f = Math.sign(this.vel) * Math.min(Math.abs(this.vel), friction);
-        this.vel -= f * dt;
+        this.vel -= f * dt * 2;
       }
       this.mesh.position.x += this.vel * dt;
-      const halfW = WORLD.width * 0.5 - PLAYER.w * 0.55;
+      const playerWidth = (PLAYER.w * this.mesh.scale.x) / 2;
+      const halfW = WORLD.width * 0.5 - playerWidth * 1.1;
       this.mesh.position.x = clamp(this.mesh.position.x, -halfW, halfW);
       this.mesh.rotation.z = THREE.MathUtils.lerp(this.mesh.rotation.z, -this.vel * 0.01, 8 * dt);
+      
+      const desiredZ = this.targetDirZ * PLAYER.maxSpeed * 0.7;
+      const deltaZ = desiredZ - this.velZ;
+      const impulseZ = clamp(deltaZ, -accel, accel);
+      this.velZ += impulseZ * dt;
+      if (this.targetDirZ === 0) {
+        const f = Math.sign(this.velZ) * Math.min(Math.abs(this.velZ), friction);
+        this.velZ -= f * dt * 2;
+      }
+      this.mesh.position.z += this.velZ * dt;
+      const playerDepth = (PLAYER.d * this.mesh.scale.z) / 2;
+      const halfD = WORLD.depth * 0.5 - playerDepth;
+      this.mesh.position.z = clamp(this.mesh.position.z, -halfD, halfD);
+      this.mesh.rotation.x = THREE.MathUtils.lerp(this.mesh.rotation.x, this.velZ * 0.01, 8 * dt);
     }
-    reset() { this.vel = 0; this.targetDir = 0; this.mesh.position.x = 0; this.mesh.rotation.z = 0; }
+    reset() { 
+      this.vel = 0; this.targetDir = 0; this.velZ = 0; this.targetDirZ = 0;
+      this.mesh.position.set(0, ground.position.y + PLAYER.h / 2 + 2, 0);
+      this.mesh.rotation.set(0,0,0);
+      this.setShield(false); 
+      this.setShrink(false);
+    }
   }
 
   class ObstaclePool {
@@ -243,7 +389,6 @@
       const level = LEVELS[GameState.level];
       this.fallSpeed = clamp(level.INIT.speed + level.DIFF.speedPerMin * (elapsed / 60), level.INIT.speed, level.DIFF.maxFallSpeed);
       this.spawnEvery = clamp(level.INIT.spawnEvery - level.DIFF.spawnFasterPerMin * (elapsed / 60), level.DIFF.minSpawn, level.INIT.spawnEvery);
-
       this.spawnTimer += dt;
       if (this.spawnTimer >= this.spawnEvery && this.live.length < this.maxLive) {
         this.spawnTimer = 0;
@@ -259,7 +404,6 @@
         o.mesh.visible = true;
         this.live.push(o);
       }
-
       for (let i = this.live.length - 1; i >= 0; i--) {
         const o = this.live[i];
         o.mesh.position.y -= o.speed * dt;
@@ -278,15 +422,70 @@
       this.spawnTimer = 0;
     }
   }
+  
+  class PowerUpPool {
+    constructor() { this.pool = []; }
+    get() { return this.pool.pop() || this.create(); }
+    release(obj) { obj.mesh.visible = false; this.pool.push(obj); }
+    create() {
+      const geo = new THREE.IcosahedronBufferGeometry(4, 0);
+      const mat = new THREE.MeshStandardMaterial({ roughness: 0.2, metalness: 0.3, emissive: 0x333333 });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.castShadow = true; mesh.visible = false;
+      scene.add(mesh);
+      return { mesh, type: null, speed: 0 };
+    }
+  }
+
+  class PowerUps {
+    constructor() {
+      this.pool = new PowerUpPool();
+      this.live = []; this.spawnTimer = 0; this.spawnEvery = 15;
+    }
+    update(dt) {
+      this.spawnTimer += dt;
+      if (this.spawnTimer >= this.spawnEvery && this.live.length < 5) {
+        this.spawnTimer = 0;
+        const p = this.pool.get();
+        const types = Object.keys(POWERUP_TYPES);
+        p.type = POWERUP_TYPES[types[Math.floor(Math.random() * types.length)]];
+        p.mesh.material.color.set(p.type.color);
+        p.mesh.position.set(randRange(-WORLD.width*0.4, WORLD.width*0.4), ground.position.y + WORLD.height*0.5, randRange(-WORLD.depth*0.2, WORLD.depth*0.2));
+        p.speed = obstacles.fallSpeed * 0.7;
+        p.mesh.visible = true;
+        this.live.push(p);
+      }
+      for (let i = this.live.length - 1; i >= 0; i--) {
+        const p = this.live[i];
+        p.mesh.position.y -= p.speed * dt;
+        p.mesh.rotation.y += 1.5 * dt;
+        p.mesh.rotation.x += 1.0 * dt;
+        if (p.mesh.position.y < ground.position.y - 10) {
+          this.pool.release(p);
+          this.live.splice(i, 1);
+        }
+      }
+    }
+    clear() {
+      for (const p of this.live) this.pool.release(p);
+      this.live.length = 0;
+      this.spawnTimer = randRange(0, 5);
+    }
+  }
 
   // =========================
   // Game State & Manager
   // =========================
   const GameState = {
     running: false, paused: false, lives: 3, score: 0, best: 0, elapsed: 0, level: 'moderate',
+    timeScale: 1.0,
+    activePowerUp: { type: null, timeLeft: 0 },
+    theme: null,
+    // New state variable to handle pause logic when settings are opened
+    wasRunningWhenSettingsOpened: false,
   };
 
-  let player, obstacles;
+  let player, obstacles, powerups;
 
   // UI elements
   const gameHud = document.getElementById('game-hud');
@@ -297,15 +496,22 @@
   const banner  = document.getElementById('ui-banner');
   const btnPause = document.getElementById('btn-pause');
   const btnSettings = document.getElementById('btn-settings');
-  const drawer = document.getElementById('drawer');
+  const settingsModal = document.getElementById('settings-modal');
   const btnCloseSettings = document.getElementById('btn-close-settings');
   const inpSens = document.getElementById('inp-sens');
   const inpVol = document.getElementById('inp-vol');
   const selGfx = document.getElementById('sel-gfx');
   const btnLeft = document.getElementById('btn-left');
   const btnRight = document.getElementById('btn-right');
+  const btnUp = document.getElementById('btn-up');
+  const btnDown = document.getElementById('btn-down');
+  const uiPowerupStatus = document.getElementById('ui-powerup-status');
+  const sensVal = document.getElementById('sens-val');
+  const volVal = document.getElementById('vol-val');
+  const countdownModal = document.getElementById('countdown-modal');
+  const countdownText = document.getElementById('countdown-text');
 
-  // --- Local Storage for Scores and State ---
+
   const STORAGE_KEYS = { BEST: 'perfect_blocks_best', STATE: 'perfect_blocks_state' };
   function loadBest() {
     try { GameState.best = parseInt(localStorage.getItem(STORAGE_KEYS.BEST) || '0', 10) || 0; } catch { GameState.best = 0; }
@@ -325,29 +531,128 @@
     try { localStorage.removeItem(STORAGE_KEYS.STATE); } catch {}
   }
 
-  // --- UI Banner Functions ---
   function setBanner(html) {
-    banner.innerHTML = `<div class="glass rounded-2xl p-6 sm:p-8 fade-in text-white text-center">${html}</div>`;
+    banner.innerHTML = `<div class="glass rounded-2xl p-6 sm:p-8 fade-in text-white text-center" tabindex="0">${html}</div>`;
+    banner.querySelector('button')?.focus();
   }
 
   function showMainMenu() {
     const savedState = loadGameState();
     setBanner(`
       <h1 class="text-3xl sm:text-5xl font-black drop-shadow-sm">Dodge Falling Blocks 3D</h1>
-      <div class="mt-6 flex flex-col items-center justify-center gap-3">
+      <div class="mt-4 flex flex-col items-center justify-center gap-3">
         <button id="_new" class="w-full max-w-xs px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 transition font-semibold text-lg">New Game</button>
         <button id="_continue" class="w-full max-w-xs px-5 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-600 transition font-semibold text-lg ${!savedState ? 'opacity-50 cursor-not-allowed' : ''}">Continue</button>
-        <button id="_scores" class="w-full max-w-xs px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 transition font-semibold text-lg">High Scores</button>
+        <button id="_dreamTheme" class="w-full max-w-xs px-5 py-2.5 rounded-xl bg-purple-500 hover:bg-purple-600 transition font-semibold text-lg">✨ Dream a Theme</button>
+        <button id="_howToPlay" class="w-full max-w-xs px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 transition font-semibold text-lg">How to Play</button>
       </div>
+      <p id="theme-display" class="mt-3 text-sm text-white/70 h-5"></p>
+      <!-- Settings symbol for home/main menu (Updated Symbol) -->
+      <button id="_homeSettings" class="absolute bottom-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 transition" aria-label="Open settings">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+            <path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.31-.61-.22l-2.49 1c-.52-.39-1.09-.72-1.71-.99L14.12 3.4c-.09-.23-.3-.38-.54-.38h-4c-.24 0-.45.15-.54.38L8.65 6.01c-.62.27-1.2.6-1.71.99l-2.49-1c-.22-.09-.49 0-.61.22l-2 3.46c-.12.22-.07.49.12.64l2.11 1.65c-.04.32-.07.64-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.31.61.22l2.49-1c.52.39 1.09.72 1.71.99l.34 2.59c.09.23.3.38.54.38h4c.24 0 .45-.15.54-.38l.34-2.59c.62-.27 1.2-.6 1.71-.99l2.49 1c.22.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zm-7.43 1.91c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z"/></svg>
+      </button>
     `);
     document.getElementById('_new').onclick = showLevelSelect;
-    document.getElementById('_scores').onclick = showHighScores;
+    document.getElementById('_howToPlay').onclick = showHowToPlay;
+    document.getElementById('_dreamTheme').onclick = dreamTheme;
+    document.getElementById('_homeSettings').onclick = () => openSettings(false); // Do not resume, as it's the main menu
     const continueBtn = document.getElementById('_continue');
-    if (savedState) {
-      continueBtn.onclick = continueGame;
+    if (savedState) continueBtn.onclick = continueGame;
+    const themeDisplay = document.getElementById('theme-display');
+    if (GameState.theme) {
+      themeDisplay.textContent = `Current Theme: ${GameState.theme.name}`;
+      // Re-apply theme just in case it was reset
+      applyTheme(GameState.theme); 
     }
   }
   
+  // ✨ Gemini Feature: AI-Generated Themes
+  async function dreamTheme() {
+    const btn = document.getElementById('_dreamTheme');
+    const display = document.getElementById('theme-display');
+    if (!btn || !display) return;
+    btn.disabled = true;
+    btn.textContent = 'Dreaming...';
+    display.textContent = 'Contacting AI for inspiration...';
+    const prompt = `Generate a creative theme for a 3D block-dodging game. Provide a short name (1-3 words), a hex color for the ground, and a hex color for the fog. Your response must be only the theme details in the format: NAME|#GROUND_COLOR|#FOG_COLOR. Example: Molten Core|#ff4800|#3d1a04`;
+    const response = await callGemini(prompt);
+    if (response) {
+      const parts = response.split('|');
+      if (parts.length === 3) {
+        const [name, groundColor, fogColor] = parts.map(p => p.trim());
+        // Simple regex check to ensure colors are valid hex codes
+        if (/^#[0-9a-f]{6}$/i.test(groundColor) && /^#[0-9a-f]{6}$/i.test(fogColor)) {
+            GameState.theme = { name, groundColor, fogColor };
+            display.textContent = `Current Theme: ${GameState.theme.name}`;
+            applyTheme(GameState.theme);
+        } else {
+             display.textContent = 'Invalid color generated. Try again.';
+        }
+      } else {
+        display.textContent = 'Could not generate theme. Try again!';
+      }
+    } else {
+      display.textContent = 'AI is sleeping. Please try again later.';
+    }
+    btn.disabled = false;
+    btn.textContent = '✨ Dream a New Theme';
+  }
+  
+  function applyTheme(theme) {
+    if (!ground || !scene.fog || !hemiLight) return;
+    const defaultTheme = { name: 'Default', groundColor: 0x0f1a33, fogColor: 0x0b1220 };
+    const target = theme || defaultTheme;
+
+    try {
+      // Use THREE.Color to parse hex strings, which is more robust
+      const groundColorObj = new THREE.Color(target.groundColor);
+      const fogColorObj = new THREE.Color(target.fogColor);
+      
+      ground.material.color.set(groundColorObj);
+      scene.fog.color.set(fogColorObj);
+
+      // Adjust hemiLight to provide lighting consistent with the new theme's colors
+      // Sky color: a blend between the fog color and white
+      hemiLight.color.set(fogColorObj.clone().lerp(new THREE.Color(0xffffff), 0.3)); 
+      // Ground color: matches the ground material
+      hemiLight.groundColor.set(groundColorObj);
+      
+      // Update background CSS for theme matching
+      const bgEl = document.getElementById('bg');
+      if (bgEl) {
+          bgEl.style.background = `radial-gradient(120% 120% at 50% 0%, ${target.fogColor} 0%, ${new THREE.Color(target.fogColor).lerp(new THREE.Color(0x000000), 0.5).getStyle()} 60%, #05080f 100%)`;
+      }
+
+    } catch (e) {
+      console.error("Failed to apply theme, resetting to default:", e);
+      if (theme) applyTheme(null);
+    }
+  }
+  
+  function showHowToPlay() {
+    setBanner(`
+      <h2 class="text-2xl sm:text-4xl font-black">How to Play</h2>
+      <div class="mt-4 text-left text-base sm:text-lg">
+        <p class="mb-2"><strong>Objective:</strong> Dodge the falling blocks for as long as you can!</p>
+        <p class="mb-2"><strong>Controls:</strong> Arrow Keys or WASD to move. 'P' to pause.</p>
+        <hr class="my-3 border-white/20">
+        <p class="mb-2 font-bold">Collect Power-ups!</p>
+        <ul class="list-none space-y-2">
+            <li><span class="text-xl">${POWERUP_TYPES.SHIELD.icon}</span> <strong>Shield:</strong> Become invincible for a short time.</li>
+            <li><span class="text-xl">${POWERUP_TYPES.SLOWMO.icon}</span> <strong>Slow-Mo:</strong> Slows down all falling blocks.</li>
+            <li><span class="text-xl">${POWERUP_TYPES.SHRINK.icon}</span> <strong>Shrink:</strong> Makes you smaller and harder to hit.</li>
+        </ul>
+        <hr class="my-3 border-white/20">
+        <p class="mb-2 font-bold text-purple-300">✨ Try dreaming a new theme from the main menu for a fresh look!</p>
+      </div>
+      <div class="mt-6">
+        <button id="_back" class="px-5 py-2 rounded-xl bg-white/10 hover:bg-white/20 transition font-semibold">Back to Main Menu</button>
+      </div>
+    `);
+    document.getElementById('_back').onclick = showMainMenu;
+  }
+
   function showLevelSelect() {
     setBanner(`
       <h2 class="text-2xl sm:text-4xl font-black">Select Difficulty</h2>
@@ -357,9 +662,7 @@
         <button data-level="hard" class="px-4 py-3 rounded-xl bg-orange-500/80 hover:bg-orange-500 transition font-semibold">Hard</button>
         <button data-level="insane" class="px-4 py-3 rounded-xl bg-red-600/80 hover:bg-red-600 transition font-semibold">Insane</button>
       </div>
-      <div class="mt-4">
-        <button id="_back" class="px-5 py-2 rounded-xl bg-white/10 hover:bg-white/20 transition font-semibold">Back</button>
-      </div>
+      <div class="mt-4"><button id="_back" class="px-5 py-2 rounded-xl bg-white/10 hover:bg-white/20 transition font-semibold">Back</button></div>
     `);
     banner.querySelectorAll('[data-level]').forEach(btn => {
       btn.onclick = () => startGame(btn.dataset.level);
@@ -367,47 +670,58 @@
     document.getElementById('_back').onclick = showMainMenu;
   }
 
-  function showHighScores() {
-      // For now, we only have one high score. This can be expanded later.
-      loadBest();
-      setBanner(`
-        <h2 class="text-2xl sm:text-4xl font-black">High Score</h2>
-        <div class="mt-4 text-3xl font-bold">${GameState.best}</div>
-        <div class="mt-4">
-            <button id="_back" class="px-5 py-2 rounded-xl bg-white/10 hover:bg-white/20 transition font-semibold">Back</button>
-        </div>
-      `);
-      document.getElementById('_back').onclick = showMainMenu;
+  // ✨ Gemini Feature: AI Coach
+  async function getAICoachTip() {
+    const tipElement = document.getElementById('ai-coach-tip');
+    if (!tipElement) return;
+    tipElement.innerHTML = `<i class="text-white/70">✨ Coach is thinking...</i>`;
+    const prompt = `You're a fun, slightly cheeky AI coach for "Dodge Falling Blocks 3D". I just finished on '${LEVELS[GameState.level].name}' difficulty with ${GameState.score} points. Give me one short, creative tip to improve, under 15 words.`;
+    const tip = await callGemini(prompt);
+    if (tip) {
+      tipElement.innerHTML = `<span class="text-amber-300">✨ Coach says: "${tip.replace(/"/g, '')}"</span>`;
+    } else {
+      tipElement.innerHTML = `<span class="text-white/70">Good game! Try to beat your score next time.</span>`;
+    }
   }
 
   function showGameOver() {
     clearGameState();
+    applyTheme(null);
     const newBest = Math.max(GameState.best, GameState.score);
     if (newBest > GameState.best) { GameState.best = newBest; saveBest(); }
     setBanner(`
       <h2 class="text-3xl sm:text-5xl font-black">Game Over</h2>
       <div class="mt-2 text-white/80">Level: <span class="font-semibold">${LEVELS[GameState.level].name}</span></div>
       <div class="mt-1 text-white/80">Score: <span class="font-semibold">${GameState.score}</span> · Best: <span class="font-semibold">${GameState.best}</span></div>
-      <div class="mt-4 flex flex-wrap items-center justify-center gap-3">
+      <div id="ai-coach-tip" class="mt-4 h-10 flex items-center justify-center text-center"></div>
+      <div class="mt-2 flex flex-wrap items-center justify-center gap-3">
         <button id="_restart" class="px-5 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 transition font-semibold">Play Again</button>
         <button id="_menu" class="px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 transition font-semibold">Main Menu</button>
       </div>
     `);
     document.getElementById('_restart').onclick = () => startGame(GameState.level);
     document.getElementById('_menu').onclick = showMainMenu;
+    getAICoachTip();
   }
 
   function setGameUIVisible(visible) {
-      const opacity = visible ? '1' : '0';
-      gameHud.style.opacity = opacity;
-      touchControls.style.opacity = opacity;
+    const opacity = visible ? '1' : '0';
+    gameHud.style.opacity = opacity;
+    touchControls.style.opacity = opacity;
+    if (visible) {
+      gameHud.setAttribute('aria-hidden', 'false');
+      touchControls.setAttribute('aria-hidden', 'false');
+    } else {
+      gameHud.setAttribute('aria-hidden', 'true');
+      touchControls.setAttribute('aria-hidden', 'true');
+    }
   }
 
   function startGame(level) {
     clearGameState();
     banner.innerHTML = '';
     setGameUIVisible(true);
-
+    applyTheme(GameState.theme);
     GameState.running = true;
     GameState.paused = false;
     GameState.level = level;
@@ -415,39 +729,50 @@
     GameState.lives = levelSettings.lives;
     GameState.score = 0;
     GameState.elapsed = 0;
-    
     player.reset();
     obstacles.clear();
+    powerups.clear();
+    deactivatePowerUp();
     uiLives.textContent = GameState.lives;
     uiScore.textContent = GameState.score;
-    loadBest(); // Ensure best score is up to date
+    loadBest();
   }
 
   function continueGame() {
-      const savedState = loadGameState();
-      if (!savedState) {
-          showMainMenu();
-          return;
-      }
-      banner.innerHTML = '';
-      setGameUIVisible(true);
-
-      GameState.running = true;
-      GameState.paused = false;
-      GameState.level = savedState.level;
-      GameState.lives = savedState.lives;
-      GameState.score = savedState.score;
-      GameState.elapsed = savedState.elapsed;
-
-      player.reset();
-      obstacles.clear(); // Obstacles are not saved, they will respawn
-      uiLives.textContent = GameState.lives;
-      uiScore.textContent = GameState.score;
-      loadBest();
+    const savedState = loadGameState();
+    if (!savedState) { showMainMenu(); return; }
+    banner.innerHTML = '';
+    setGameUIVisible(true);
+    applyTheme(GameState.theme);
+    GameState.running = true;
+    GameState.paused = true; // Start paused, let countdown resume
+    GameState.level = savedState.level;
+    GameState.lives = savedState.lives;
+    GameState.score = savedState.score;
+    GameState.elapsed = savedState.elapsed;
+    deactivatePowerUp();
+    player.reset();
+    obstacles.clear();
+    powerups.clear();
+    uiLives.textContent = GameState.lives;
+    uiScore.textContent = GameState.score;
+    loadBest();
+    
+    // Start countdown immediately
+    showCountdown(() => {
+        GameState.paused = false;
+        btnPause.textContent = 'Pause';
+    });
   }
 
   function loseLife() {
     if (!GameState.running) return;
+    // Check if player is shielded before losing life
+    if (player.isShielded) {
+        beeper.beep(440, 0.08, 'sine'); // Shield absorb sound
+        return;
+    }
+    
     GameState.lives -= 1;
     uiLives.textContent = GameState.lives;
     beeper.beep(220, 0.18, 'sawtooth');
@@ -456,6 +781,38 @@
       GameState.running = false;
       setGameUIVisible(false);
       showGameOver();
+    }
+  }
+  
+  function activatePowerUp(powerup) {
+    deactivatePowerUp();
+    GameState.activePowerUp.type = powerup.type;
+    GameState.activePowerUp.timeLeft = powerup.type.duration;
+    if (powerup.type === POWERUP_TYPES.SHIELD) player.setShield(true);
+    if (powerup.type === POWERUP_TYPES.SLOWMO) GameState.timeScale = 0.5;
+    if (powerup.type === POWERUP_TYPES.SHRINK) player.setShrink(true);
+    beeper.beep(1600, 0.1, 'triangle');
+  }
+
+  function deactivatePowerUp() {
+    const active = GameState.activePowerUp;
+    if (!active.type) return;
+    if (active.type === POWERUP_TYPES.SHIELD) player.setShield(false);
+    if (active.type === POWERUP_TYPES.SLOWMO) GameState.timeScale = 1.0;
+    if (active.type === POWERUP_TYPES.SHRINK) player.setShrink(false);
+    active.type = null;
+    active.timeLeft = 0;
+    uiPowerupStatus.innerHTML = '';
+  }
+
+  function updatePowerUpStatus(dt) {
+    const active = GameState.activePowerUp;
+    if (!active.type) return;
+    active.timeLeft -= dt;
+    if (active.timeLeft <= 0) {
+      deactivatePowerUp();
+    } else {
+      uiPowerupStatus.innerHTML = `<span class="text-xl powerup-icon">${active.type.icon}</span><span>${Math.ceil(active.timeLeft)}s</span>`;
     }
   }
 
@@ -473,36 +830,48 @@
     setTimeout(() => flashEl.style.opacity = '0', 40);
   }
 
-  // =========================
-  // Input (keyboard + mobile)
-  // =========================
-  const Keys = { left: false, right: false };
-  function updateInputFromKeys() { player.targetDir = (Keys.left ? -1 : 0) + (Keys.right ? 1 : 0); }
+  const Keys = { left: false, right: false, up: false, down: false };
+  function updateInputFromKeys() { 
+    if (!player) return;
+    player.targetDir = (Keys.left ? -1 : 0) + (Keys.right ? 1 : 0);
+    player.targetDirZ = (Keys.up ? -1 : 0) + (Keys.down ? 1 : 0);
+  }
+
   window.addEventListener('keydown', e => {
     if (e.repeat) return;
-    if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'a') { Keys.left = true; updateInputFromKeys(); }
-    if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'd') { Keys.right = true; updateInputFromKeys(); }
-    if (e.key.toLowerCase() === 'p') togglePause();
+    // Only allow movement if game is running and not paused
+    if (GameState.running && !GameState.paused) {
+        if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'a') { Keys.left = true; e.preventDefault(); }
+        if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'd') { Keys.right = true; e.preventDefault(); }
+        if (e.key === 'ArrowUp' || e.key.toLowerCase() === 'w') { Keys.up = true; e.preventDefault(); }
+        if (e.key === 'ArrowDown' || e.key.toLowerCase() === 's') { Keys.down = true; e.preventDefault(); }
+        updateInputFromKeys();
+    }
+    if (e.key.toLowerCase() === 'p') { togglePause(); e.preventDefault(); }
   });
   window.addEventListener('keyup', e => {
-    if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'a') { Keys.left = false; updateInputFromKeys(); }
-    if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'd') { Keys.right = false; updateInputFromKeys(); }
+    if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'a') { Keys.left = false; e.preventDefault(); }
+    if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'd') { Keys.right = false; e.preventDefault(); }
+    if (e.key === 'ArrowUp' || e.key.toLowerCase() === 'w') { Keys.up = false; e.preventDefault(); }
+    if (e.key === 'ArrowDown' || e.key.toLowerCase() === 's') { Keys.down = false; e.preventDefault(); }
+    updateInputFromKeys();
   });
-  const startHold = (dir) => { player.targetDir = dir; };
-  const stopHold = () => { if (!Keys.left && !Keys.right) player.targetDir = 0; else updateInputFromKeys(); };
-  const addHoldEvents = (el, dir) => {
-    el.addEventListener('touchstart', e => { e.preventDefault(); startHold(dir); }, { passive: false });
-    el.addEventListener('touchend', e => { e.preventDefault(); stopHold(); }, { passive: false });
-    el.addEventListener('mousedown', () => startHold(dir));
-    el.addEventListener('mouseup', stopHold);
-    el.addEventListener('mouseleave', stopHold);
+  
+  const addHoldEvents = (el, key) => {
+    if (!el) return;
+    const start = e => { e.preventDefault(); Keys[key] = true; updateInputFromKeys(); };
+    const end = e => { e.preventDefault(); Keys[key] = false; updateInputFromKeys(); };
+    el.addEventListener('touchstart', start, { passive: false });
+    el.addEventListener('touchend', end, { passive: false });
+    el.addEventListener('mousedown', start);
+    el.addEventListener('mouseup', end);
+    el.addEventListener('mouseleave', end);
   };
-  addHoldEvents(btnLeft, -1);
-  addHoldEvents(btnRight, 1);
+  addHoldEvents(btnLeft, 'left');
+  addHoldEvents(btnRight, 'right');
+  addHoldEvents(btnUp, 'up');
+  addHoldEvents(btnDown, 'down');
 
-  // =========================
-  // Collision helper
-  // =========================
   const tmpBoxA = new THREE.Box3();
   const tmpBoxB = new THREE.Box3();
   function intersectsAABB(meshA, meshB) {
@@ -512,74 +881,217 @@
   }
 
   // =========================
+  // Pause/Settings Logic
+  // =========================
+  
+  function showCountdown(callback) {
+      if (!GameState.running) return;
+      
+      countdownModal.style.display = 'grid';
+      let count = 3;
+
+      const timer = setInterval(() => {
+          if (count > 0) {
+              countdownText.textContent = count;
+              beeper.beep(700, 0.05, 'sine');
+              count--;
+          } else {
+              clearInterval(timer);
+              countdownModal.style.display = 'none';
+              beeper.beep(1200, 0.1, 'sine');
+              callback();
+          }
+      }, 1000);
+      
+      // Initial display
+      countdownText.textContent = count;
+      beeper.beep(700, 0.05, 'sine');
+      count--;
+  }
+
+
+  function togglePause() {
+    if (!GameState.running) return;
+    
+    if (!GameState.paused) {
+        // PAUSE THE GAME
+        GameState.paused = true;
+        btnPause.textContent = 'Resume';
+        setBanner(`
+            <h3 class='text-2xl sm:text-4xl font-black'>Paused</h3>
+            <div id="pause-status" class='mt-2 text-white/80 h-10 flex items-center justify-center text-center'></div>
+            <div class="mt-2 flex flex-col items-center justify-center gap-3">
+                <button id="_resume" class="w-full max-w-xs px-5 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-600 transition font-semibold text-lg">Resume</button>
+                <button id="_save" class="w-full max-w-xs px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 transition font-semibold text-lg">Save Game</button>
+                <button id="_menu" class="w-full max-w-xs px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 transition font-semibold text-lg">Main Menu</button>
+            </div>
+        `);
+        getPauseEncouragement();
+        document.getElementById('_resume').onclick = togglePause;
+        document.getElementById('_save').onclick = () => {
+            saveGameState();
+            const statusEl = document.getElementById('pause-status');
+            if (statusEl) {
+                statusEl.innerHTML = `<span class="text-green-400">Game Saved!</span>`;
+            }
+        };
+        document.getElementById('_menu').onclick = () => {
+            GameState.running = false;
+            GameState.paused = false;
+            setGameUIVisible(false);
+            applyTheme(null);
+            showMainMenu();
+        };
+    } else {
+        // RESUME THE GAME
+        banner.innerHTML = '';
+        showCountdown(() => {
+            GameState.paused = false;
+            btnPause.textContent = 'Pause';
+        });
+    }
+  }
+  
+  function openSettings(canResume) {
+    if (canResume && GameState.running && !GameState.paused) {
+        GameState.wasRunningWhenSettingsOpened = true;
+        togglePause(); // Pauses the game and shows the pause menu
+    } else {
+        GameState.wasRunningWhenSettingsOpened = false;
+        // If not running (e.g., main menu), ensure banner is hidden before showing settings
+        banner.innerHTML = ''; 
+    }
+    
+    // Update display values in the settings modal
+    inpSens.value = player.sensitivity;
+    sensVal.textContent = parseFloat(inpSens.value).toFixed(1);
+    inpVol.value = beeper.volume;
+    volVal.textContent = `${Math.round(beeper.volume * 100)}%`;
+    
+    settingsModal.classList.remove('hidden');
+  }
+
+  function closeSettings() {
+    settingsModal.classList.add('hidden');
+    // Resume game only if it was running before opening settings
+    if (GameState.running && GameState.wasRunningWhenSettingsOpened) {
+        // Clear the banner (which currently shows the Pause menu)
+        banner.innerHTML = '';
+        showCountdown(() => {
+            GameState.paused = false;
+            btnPause.textContent = 'Pause';
+        });
+    } else if (!GameState.running) {
+        // FIX: If the game is not running (i.e., we are on the main menu or game over screen),
+        // we must restore the main menu content.
+        showMainMenu();
+    }
+    GameState.wasRunningWhenSettingsOpened = false; // Reset state
+  }
+  
+  // AI Coach for pause screen
+  async function getPauseEncouragement() {
+    const statusEl = document.getElementById('pause-status');
+    if (!statusEl) return;
+    statusEl.innerHTML = `<i class="text-white/70">✨ Coach is thinking...</i>`;
+    const prompt = `You're a fun, slightly cheeky AI coach for "Dodge Falling Blocks 3D". I've paused the game. Give me a very short, funny, or encouraging message about taking a break. Max 15 words. My current score is ${GameState.score}.`;
+    const tip = await callGemini(prompt);
+    // Only update if the pause menu is still visible
+    if (GameState.paused && document.getElementById('pause-status')) {
+        if (tip) {
+            statusEl.innerHTML = `<span class="text-amber-300">✨ Coach says: "${tip.replace(/"/g, '')}"</span>`;
+        } else {
+            statusEl.textContent = 'Take a break! You got this.';
+        }
+    }
+  }
+
+  // =========================
   // Main loop
   // =========================
   function renderLoop() {
-    const dt = clock.getDelta();
+    const rawDt = clock.getDelta();
+    
     if (GameState.running && !GameState.paused) {
+      const dt = rawDt * GameState.timeScale;
       GameState.elapsed += dt;
       player.update(dt);
       obstacles.update(dt, GameState.elapsed);
+      powerups.update(dt);
+      updatePowerUpStatus(dt); // Use dt for game time
+      
       for (let i = obstacles.live.length - 1; i >= 0; i--) {
         const o = obstacles.live[i];
         if (intersectsAABB(player.mesh, o.mesh)) {
+          loseLife(); // loseLife now handles shield check
           obstacles.pool.release(o);
           obstacles.live.splice(i, 1);
-          loseLife();
+          // Don't break here if shield is active, allow other blocks to be hit/absorbed
+          if (!player.isShielded) break; 
+        }
+      }
+      for (let i = powerups.live.length - 1; i >= 0; i--) {
+        const p = powerups.live[i];
+        if (intersectsAABB(player.mesh, p.mesh)) {
+          activatePowerUp(p);
+          powerups.pool.release(p);
+          powerups.live.splice(i, 1);
           break;
         }
       }
       uiScore.textContent = GameState.score;
+    } else if (GameState.running && GameState.paused) {
+        // If paused, update powerup status using rawDt so the timer still runs down (optional game design choice)
+        updatePowerUpStatus(rawDt);
     }
-    camera.position.x = THREE.MathUtils.lerp(camera.position.x, player.mesh.position.x * 0.65, 5 * dt);
-    camera.lookAt(new THREE.Vector3(player.mesh.position.x * 0.2, 10, 0));
+    
+    // Camera movement should always be smooth (uses rawDt)
+    camera.position.x = THREE.MathUtils.lerp(camera.position.x, player.mesh.position.x, 4 * rawDt);
+    camera.lookAt(new THREE.Vector3(player.mesh.position.x, 10, 0));
     renderer.render(scene, camera);
     requestAnimationFrame(renderLoop);
   }
 
   // =========================
-  // Pause / Settings / Resize
+  // Event Listeners
   // =========================
-  function togglePause() {
-    if (!GameState.running) return;
-    GameState.paused = !GameState.paused;
-    btnPause.textContent = GameState.paused ? 'Resume' : 'Pause';
-
-    if (GameState.paused) {
-      saveGameState();
-      setBanner(`
-        <h3 class='text-2xl sm:text-4xl font-black'>Paused</h3>
-        <div class='mt-2 text-white/80'>Your progress is saved.</div>
-        <div class="mt-4 flex flex-col items-center justify-center gap-3">
-            <button id="_resume" class="w-full max-w-xs px-5 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-600 transition font-semibold text-lg">Resume</button>
-            <button id="_menu" class="w-full max-w-xs px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 transition font-semibold text-lg">Main Menu</button>
-        </div>
-      `);
-      
-      document.getElementById('_resume').onclick = togglePause;
-      document.getElementById('_menu').onclick = () => {
-          GameState.running = false;
-          GameState.paused = false;
-          setGameUIVisible(false);
-          showMainMenu();
-      };
-    } else {
-      banner.innerHTML = '';
-    }
-  }
-
   btnPause.onclick = togglePause;
-  btnSettings.onclick = () => { drawer.classList.toggle('hidden'); };
-  btnCloseSettings.onclick = () => { drawer.classList.add('hidden'); };
-  inpSens.oninput = (e) => player.setSensitivity(parseFloat(e.target.value));
-  inpVol.oninput = (e) => beeper.setVolume(parseFloat(e.target.value));
+  
+  // Settings buttons now call the unified functions
+  btnSettings.onclick = () => openSettings(true); // Can resume from game
+  btnCloseSettings.onclick = closeSettings;
+  
+  // Settings input updates
+  inpSens.oninput = (e) => {
+    const value = parseFloat(e.target.value);
+    player.setSensitivity(value);
+    sensVal.textContent = value.toFixed(1);
+  };
+  inpVol.oninput = (e) => {
+    const value = parseFloat(e.target.value);
+    beeper.setVolume(value);
+    volVal.textContent = `${Math.round(value * 100)}%`;
+  };
+  
   selGfx.onchange = (e) => {
-    initThree(e.target.value);
+    // Save current settings before reloading
     const oldSens = player ? player.sensitivity : 1;
+    const oldVol = beeper ? beeper.volume : 0.5;
+    const oldTheme = GameState.theme;
+
+    // Reinitialize THREE.js and game entities with new quality
+    initThree(e.target.value);
     player = new Player();
-    player.setSensitivity(oldSens);
     obstacles = new Obstacles();
-    // Game state is not restored on gfx change, user must restart.
+    powerups = new PowerUps();
+    
+    // Restore previous settings
+    player.setSensitivity(oldSens);
+    beeper.setVolume(oldVol);
+    applyTheme(oldTheme);
+    
+    // Close settings and go to main menu
+    settingsModal.classList.add('hidden');
     setGameUIVisible(false);
     showMainMenu();
   };
@@ -599,8 +1111,14 @@
     initThree('high');
     player = new Player();
     obstacles = new Obstacles();
+    powerups = new PowerUps();
+    
+    // Initialize UI values on boot
     player.setSensitivity(parseFloat(inpSens.value));
     beeper.setVolume(parseFloat(inpVol.value));
+    sensVal.textContent = parseFloat(inpSens.value).toFixed(1);
+    volVal.textContent = `${Math.round(parseFloat(inpVol.value) * 100)}%`;
+    
     showMainMenu();
     renderLoop();
   }
